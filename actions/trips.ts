@@ -7,7 +7,7 @@ import { z } from "zod";
 import { connectDB } from "@/lib/db";
 import { Trip } from "@/models/Trip";
 import OpenAI from "openai";
-import * as Sentry from "@sentry/nextjs";
+// Sentry disabled
 
 const tripInputSchema = z.object({
   destination: z.string().min(2),
@@ -188,16 +188,7 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
       const call = openai.responses.create({
         model: "gpt-4o-mini",
         input: prompt,
-        // Enforce a strict JSON schema to ensure required fields are present
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "itinerary_schema",
-            schema: itinerarySchemaObject,
-            strict: true
-          }
-        },
-        temperature: 0.3
+        temperature: 0.2
       });
       // 30s timeout race
       const result = await Promise.race([
@@ -233,10 +224,6 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
     // Return only minimal, fully-serializable data to the client
     return { tripId: created._id.toString() };
   } catch (error: any) {
-    // Capture unexpected server action errors in Sentry (if configured)
-    try {
-      Sentry.captureException(error);
-    } catch {}
     return { error: error.message || "Failed to create trip" };
   }
 }
