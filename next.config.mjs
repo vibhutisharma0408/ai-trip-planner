@@ -1,6 +1,7 @@
-import {withSentryConfig} from "@sentry/nextjs";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Explicit empty Turbopack config to silence builder selection warnings
+  turbopack: {},
   experimental: {
     serverActions: {
       allowedOrigins: ["*"]
