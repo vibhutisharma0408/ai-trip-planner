@@ -6,10 +6,6 @@ const nextConfig = {
     serverActions: {
       allowedOrigins: ["*"]
     }
-  },
-  // Disable Turbopack to fix Clerk compatibility issues
-  webpack: (config) => {
-    return config;
   }
 };
 
