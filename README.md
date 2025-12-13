@@ -1,21 +1,39 @@
 # AI Trip Planner (Next.js 16)
 
-AI-powered trip planning app built with Next.js App Router, Clerk authentication, MongoDB, and OpenAI Responses API with JSON Schema validation.
+AI-powered trip planning app that generates a realistic day-by-day itinerary using the OpenAI Responses API and stores it in MongoDB. Built with the App Router, Clerk auth, and production-ready configs for Render.
 
 ## Tech Stack
 - Next.js 16 (App Router) + React 18 + TypeScript
 - Tailwind CSS + shadcn/ui primitives
-- Clerk authentication (App Router)
-- MongoDB + Mongoose
-- OpenAI Responses API (itinerary generation via strict JSON schema)
-- Jest + React Testing Library + Playwright (tests setup)
+- Clerk (App Router) for authentication
+- MongoDB + Mongoose (models: `Trip`, `Expense`)
+- OpenAI Responses API (strict JSON schema)
+- Jest + React Testing Library + Playwright
+- Docker (multi-stage) for production
+
+## Architecture
+- **Frontend (App Router)**
+  - Pages: `app/dashboard`, `app/dashboard/[tripId]`, `app/(auth)/sign-in`, `app/(auth)/sign-up`
+  - Components: `TripForm`, `TripsList`, `TripActivities`, UI in `components/ui`
+  - Fast UX: streaming dashboard, prefetching, route-level `loading.tsx`
+
+- **Backend (Server Actions + API routes)**
+  - `actions/trips.ts`
+    - `createTripAction`: creates a minimal trip instantly, redirects fast; AI generation runs in the background and updates the trip; paths revalidated.
+    - `deleteTripAction`, `updateActivityAction` for CRUD.
+  - `app/api/ai-advice/route.ts`: derives budgeting hints from expenses via OpenAI.
+  - Middleware: `middleware.ts` (Clerk) protects app routes and injects user id header.
+
+- **Database**
+  - MongoDB with Mongoose models in `models/Trip.ts`, `models/Expense.ts`
+  - `lib/db.ts` ensures singleton connection reuse.
 
 ## Core Features
-- Secure auth-gated dashboard and trip detail pages (Clerk)
-- Plan a trip using AI: day-by-day itinerary with time, location, notes, and realistic INR costs
-- CRUD on trips (create with AI, edit activities, delete)
-- Fast UX: prefetch links, streamed dashboard with `Suspense`, route-level `loading.tsx`
-- Resilient AI flow: strict schema, retry + fallback
+- Secure, auth-gated dashboard and trip pages
+- AI-generated day-by-day itineraries with time, location, notes, INR costs
+- Fast creation flow: instant redirect to the new trip, itinerary fills in shortly after
+- Full CRUD on trips and activities
+- Resilient AI: JSON schema validation, retry + fallback
 
 ## Getting Started
 1) Install dependencies
@@ -28,7 +46,6 @@ MONGODB_URI=
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
 AI_API_KEY=
-SENTRY_DSN=
 ```
 3) Run locally
 ```bash
@@ -36,56 +53,53 @@ npm run dev
 ```
 
 ## Scripts
-- `npm run dev` — start dev server
-- `npm run build` — production build
+- `npm run dev` — start dev server (Webpack, Turbopack disabled)
+- `npm run build` — production build (standalone)
 - `npm start` — start prod server
 - `npm test` — run Jest tests
 - `npm run test:e2e` — Playwright E2E tests
 
-## Vercel Deployment Checklist
-1) Connect the GitHub repository to Vercel
-2) Set Environment Variables in Vercel Project Settings
+## Deploying to Render (Docker)
+This repo includes a multi-stage Dockerfile that works on Render.
+
+1) Create a new Web Service on Render
+2) Connect this GitHub repository
+3) Select Docker for runtime
+4) Set environment variables:
    - `MONGODB_URI`
    - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
    - `CLERK_SECRET_KEY`
    - `AI_API_KEY`
-   - `SENTRY_DSN` (optional)
-3) Build settings
-   - Framework: Next.js
-   - Build Command: `next build`
-   - Use Node 18+ runtime (Vercel default is fine)
-4) Deploy
-   - Verify routes: `/sign-in`, `/plan`, `/dashboard`, `/dashboard/[tripId]`
-   - Validate AI generation works; check Sentry for errors (optional)
+5) Expose port 3000 (Dockerfile already does).
+
+Notes:
+- Sentry is removed/disabled to avoid build/runtime errors.
+- Source maps disabled to prevent parsing issues in some hosts.
 
 ## Project Structure (high level)
 ```
 app/
-  plan/page.tsx
   dashboard/page.tsx
   dashboard/[tripId]/page.tsx
   api/ai-advice/route.ts
   (auth)/sign-in/[[...sign-in]]/page.tsx
   (auth)/sign-up/[[...sign-up]]/page.tsx
 components/
-  Navbar.tsx
-  PlanContent.tsx
   TripForm.tsx
   TripActivities.tsx
   TripsList.tsx
+  ui/*
+actions/
+  trips.ts
 lib/
   db.ts
   ai.ts
 models/
   Trip.ts
+  Expense.ts
 ```
 
-## Submission
-- Live URL (Vercel): <YOUR_VERCEL_DEPLOY_URL>
-- GitHub Repository: <YOUR_GITHUB_REPO_URL>
-- Footer credits: Add your Name, GitHub, LinkedIn in the app footer
+## Links
+- GitHub Repository: https://github.com/vibhutisharma0408/ai-trip-planner
 
-## Contact
-- GitHub: https://github.com/yourprofile
-- LinkedIn: https://www.linkedin.com/in/yourprofile
 

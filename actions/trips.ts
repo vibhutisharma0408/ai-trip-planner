@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -8,6 +8,8 @@ import { connectDB } from "@/lib/db";
 import { Trip } from "@/models/Trip";
 import OpenAI from "openai";
 // Sentry disabled
+
+// Note: headers() must be called directly in server actions, not in helper functions
 
 const tripInputSchema = z.object({
   destination: z.string().min(2),
@@ -48,7 +50,8 @@ const tripSchema = z.object({
 
 export async function createTripAction(formData: FormData) {
   try {
-    const { userId } = await auth();
+    const headersList = await headers();
+    const userId = headersList.get("x-clerk-user-id");
     if (!userId) {
       return { error: "Unauthorized" };
     }
@@ -70,6 +73,20 @@ export async function createTripAction(formData: FormData) {
     if (!parsed.success) {
       return { error: "Invalid input: " + parsed.error.message };
     }
+
+    // Create a minimal trip immediately so we can return fast
+    await connectDB();
+    const created = await Trip.create({
+      destination: parsed.data.destination,
+      startDate: parsed.data.startDate,
+      endDate: parsed.data.endDate,
+      ...(parsed.data.budget ? { budget: parsed.data.budget } : {}),
+      ...(parsed.data.travelers ? { travelers: parsed.data.travelers } : {}),
+      ...(parsed.data.style ? { style: parsed.data.style } : {}),
+      ...(parsed.data.notes ? { notes: parsed.data.notes } : {}),
+      days: [],
+      clerkUserId: userId
+    });
 
     // Helper to build a minimal, deterministic fallback itinerary if AI is unavailable
     const buildFallback = () => {
@@ -107,7 +124,7 @@ export async function createTripAction(formData: FormData) {
       };
     };
 
-  const prompt = `You are an expert travel planner. Generate a detailed trip itinerary for:
+    const prompt = `You are an expert travel planner. Generate a detailed trip itinerary for:
 Destination: ${parsed.data.destination}
 Dates: ${parsed.data.startDate} to ${parsed.data.endDate}
 ${parsed.data.budget ? `Budget: ₹${parsed.data.budget}` : ""}
@@ -139,61 +156,25 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
     }
   ]
 }`;
-    let validated: z.infer<typeof tripSchema>;
-    // Build a strict JSON schema for the Responses API to reduce parsing errors
-    const itinerarySchemaObject = {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        destination: { type: "string" },
-        startDate: { type: "string" },
-        endDate: { type: "string" },
-        budget: { type: "number" },
-        travelers: { type: "number" },
-        style: { type: "string" },
-        notes: { type: "string" },
-        days: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              date: { type: "string" },
-              activities: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    title: { type: "string" },
-                    time: { type: "string" },
-                    location: { type: "string" },
-                    notes: { type: "string" },
-                    cost: { type: "number" }
-                  },
-                  required: ["title", "time", "location", "notes", "cost"]
-                }
-              }
-            },
-            required: ["date", "activities"]
-          }
-        }
-      },
-      required: ["destination", "startDate", "endDate", "days"]
-    } as const;
 
+    let validated: z.infer<typeof tripSchema>;
+    
     async function tryGenerateViaAI(): Promise<z.infer<typeof tripSchema>> {
       if (!process.env.AI_API_KEY) throw new Error("NO_AI_KEY");
-      const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+      const openai = new OpenAI({ 
+        apiKey: process.env.AI_API_KEY,
+        timeout: 25000, // 25s timeout
+        maxRetries: 1
+      });
       const call = openai.responses.create({
         model: "gpt-4o-mini",
         input: prompt,
         temperature: 0.2
       });
-      // 30s timeout race
+      // 25s timeout race (reduced from 30s for faster response)
       const result = await Promise.race([
         call,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("AI_TIMEOUT")), 30000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error("AI_TIMEOUT")), 25000))
       ]);
       const content = (result as any).output_text as string | undefined;
       if (!content) throw new Error("NO_CONTENT");
@@ -201,35 +182,64 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
       return tripSchema.parse(parsedJson);
     }
 
-    try {
-      validated = await tryGenerateViaAI();
-    } catch {
-      // one quick retry
+    // Fire-and-forget background enrichment
+    (async () => {
       try {
-        validated = await tryGenerateViaAI();
+        try {
+          validated = await tryGenerateViaAI();
+        } catch {
+          try {
+            validated = await tryGenerateViaAI();
+          } catch {
+            validated = tripSchema.parse(buildFallback());
+          }
+        }
+        await Trip.findByIdAndUpdate(created._id, {
+          destination: validated.destination,
+          startDate: validated.startDate,
+          endDate: validated.endDate,
+          budget: validated.budget,
+          travelers: validated.travelers,
+          style: validated.style,
+          notes: validated.notes,
+          days: validated.days
+        });
+        revalidatePath(`/dashboard/${created._id.toString()}`);
       } catch {
-        validated = tripSchema.parse(buildFallback());
+        // swallow background errors
       }
-    }
-
-    // Do not normalize with defaults; rely on AI/schema to provide full fields
-
-    await connectDB();
-    const created = await Trip.create({
-      ...validated,
-      clerkUserId: userId
-    });
+    })();
 
     revalidatePath("/dashboard");
-    // Return only minimal, fully-serializable data to the client
+    // Return only minimal, fully-serializable data to the client (client will redirect)
     return { tripId: created._id.toString() };
   } catch (error: any) {
-    return { error: error.message || "Failed to create trip" };
+    // Better error handling with more specific messages
+    let errorMessage = "Failed to create trip";
+    
+    if (error?.message) {
+      if (error.message.includes("NO_AI_KEY")) {
+        errorMessage = "AI API key is missing. Please configure AI_API_KEY.";
+      } else if (error.message.includes("AI_TIMEOUT") || error.message.includes("NO_CONTENT")) {
+        // AI failed, but we should have already used fallback in the try block
+        // If we get here, it means fallback also failed
+        errorMessage = "AI generation failed. Please try again.";
+      } else if (error.message.includes("Unauthorized")) {
+        errorMessage = "You must be signed in to create a trip.";
+      } else if (error.message.includes("MONGODB_URI")) {
+        errorMessage = "Database connection error. Please try again.";
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
+    return { error: errorMessage };
   }
 }
 
 export async function deleteTripAction(formData: FormData) {
-  const { userId } = await auth();
+  const headersList = await headers();
+  const userId = headersList.get("x-clerk-user-id");
   if (!userId) throw new Error("Unauthorized");
   const tripId = formData.get("tripId")?.toString();
   if (!tripId) throw new Error("Missing tripId");
@@ -256,7 +266,8 @@ const updateActivitySchema = z.object({
 });
 
 export async function updateActivityAction(formData: FormData) {
-  const { userId } = await auth();
+  const headersList = await headers();
+  const userId = headersList.get("x-clerk-user-id");
   if (!userId) throw new Error("Unauthorized");
 
   const parsed = updateActivitySchema.safeParse({

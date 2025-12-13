@@ -1,5 +1,8 @@
 import PlanContent from "@/components/PlanContent";
 
+// Mark as dynamic for faster client-side rendering
+export const dynamic = "force-dynamic";
+
 export default function PlanPage() {
   return (
     <main className="min-h-screen bg-slate-50">

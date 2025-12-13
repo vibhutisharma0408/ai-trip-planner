@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { connectDB } from "@/lib/db";
@@ -13,7 +12,7 @@ const expenseSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const { userId } = auth();
+  const userId = req.headers.get("x-clerk-user-id");
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
@@ -34,7 +33,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { userId } = auth();
+  const userId = req.headers.get("x-clerk-user-id");
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const payload = await req.json();
@@ -56,7 +55,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const { userId } = auth();
+  const userId = req.headers.get("x-clerk-user-id");
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
@@ -83,7 +82,7 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { userId } = auth();
+  const userId = req.headers.get("x-clerk-user-id");
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);

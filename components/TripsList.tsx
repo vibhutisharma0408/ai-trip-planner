@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/button";
 
 export default async function TripsList({ userId }: { userId: string }) {
   await connectDB();
+  // Optimized query: only select needed fields, limit results, use index
   const trips = await Trip.find({ clerkUserId: userId })
     .sort({ createdAt: -1 })
-    .select({ destination: 1, startDate: 1, endDate: 1, style: 1, days: 1, budget: 1 })
-    .lean();
+    .select({ destination: 1, startDate: 1, endDate: 1, style: 1, days: 1, budget: 1, _id: 1 })
+    .limit(50)
+    .lean()
+    .exec();
 
   return (
     <>

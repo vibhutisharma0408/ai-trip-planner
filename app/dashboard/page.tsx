@@ -1,20 +1,33 @@
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { headers } from "next/headers";
 import { Button } from "@/components/ui/button";
 import TripsList from "@/components/TripsList";
+
+// Ensure this route is always dynamic (avoid PPR/static rendering issues with headers/auth)
+export const dynamic = "force-dynamic";
+
+async function getUserId(): Promise<string | null> {
+  try {
+    const headersList = await headers();
+    return headersList.get("x-clerk-user-id");
+  } catch {
+    return null;
+  }
+}
 
 export default async function DashboardPage({
   searchParams
 }: {
-  searchParams?: { deleted?: string; created?: string };
+  searchParams: Promise<{ deleted?: string; created?: string }>;
 }) {
-  const { userId } = await auth();
+  // Parallel execution for faster loading
+  const [userId, sp] = await Promise.all([getUserId(), searchParams]);
   if (!userId) redirect("/sign-in");
 
-  const deleted = searchParams?.deleted;
-  const created = searchParams?.created;
+  const deleted = sp?.deleted;
+  const created = sp?.created;
 
   return (
     <main className="min-h-screen bg-slate-50">

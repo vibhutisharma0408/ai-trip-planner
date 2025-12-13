@@ -3,9 +3,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Install deps
+# Install deps (prefer ci, fallback to install if lock is out of sync)
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
 # Copy source
 COPY . .

@@ -21,7 +21,11 @@ export async function connectDB() {
   if (!cached.promise) {
     cached.promise = mongoose
       .connect(uri, {
-        dbName: "ai-expense-tracker"
+        dbName: "ai-expense-tracker",
+        // Optimize connection for production
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
       })
       .then((mongooseInstance) => mongooseInstance);
   }

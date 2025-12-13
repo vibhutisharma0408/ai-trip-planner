@@ -1,21 +1,34 @@
 import { SignedIn } from "@clerk/nextjs";
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import Navbar from "@/components/Navbar";
 import ExpenseForm from "@/components/ExpenseForm";
 import { connectDB } from "@/lib/db";
 import { Expense } from "@/models/Expense";
 
-interface Props {
-  params: { id: string };
+export const dynamic = "force-dynamic";
+
+async function getUserId(): Promise<string | null> {
+  try {
+    const headersList = await headers();
+    const userId = headersList.get("x-clerk-user-id");
+    return userId;
+  } catch {
+    return null;
+  }
 }
 
-export default async function EditExpensePage({ params }: Props) {
-  const { userId } = auth();
+export default async function EditExpensePage({
+  params
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const userId = await getUserId();
   if (!userId) redirect("/sign-in");
 
   await connectDB();
-  const expense = await Expense.findOne({ _id: params.id, userId }).lean();
+  const { id } = await params;
+  const expense = await Expense.findOne({ _id: id, userId }).lean();
   if (!expense) redirect("/dashboard");
 
   return (
@@ -23,7 +36,7 @@ export default async function EditExpensePage({ params }: Props) {
       <Navbar />
       <main className="mx-auto max-w-3xl px-4 py-6">
         <ExpenseForm
-          expenseId={params.id}
+          expenseId={id}
           defaultValues={{
             amount: expense.amount,
             category: expense.category,

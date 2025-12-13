@@ -44,5 +44,6 @@ export type TripDocument = InferSchemaType<typeof TripSchema> & {
 };
 
 export const Trip: Model<TripDocument> =
-  mongoose.models.Trip || mongoose.model("Trip", TripSchema);
+  (mongoose.models.Trip as Model<TripDocument>) ||
+  mongoose.model<TripDocument>("Trip", TripSchema);
 

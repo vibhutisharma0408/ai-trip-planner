@@ -1,25 +1,49 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
+import { headers } from "next/headers";
 import { connectDB } from "@/lib/db";
 import { Trip } from "@/models/Trip";
 import { deleteTripAction } from "@/actions/trips";
 import { Button } from "@/components/ui/button";
 import TripActivities from "@/components/TripActivities";
 
+export const dynamic = "force-dynamic";
+
+async function getUserId(): Promise<string | null> {
+  try {
+    const headersList = await headers();
+    const userId = headersList.get("x-clerk-user-id");
+    return userId;
+  } catch {
+    return null;
+  }
+}
+
 export default async function TripDetailPage({
   params,
   searchParams
 }: {
   params: Promise<{ tripId: string }>;
-  searchParams?: { created?: string };
+  searchParams: Promise<{ created?: string }>;
 }) {
-  const { userId } = await auth();
+  // Parallel execution for faster loading
+  const [userId, paramsResolved, sp] = await Promise.all([
+    getUserId(),
+    params,
+    searchParams
+  ]);
+  
   if (!userId) redirect("/sign-in");
 
+  const { tripId } = paramsResolved;
+  
+  // Connect DB first, then fetch trip with optimized query
   await connectDB();
-  const { tripId } = await params;
-  const trip = await Trip.findById(tripId).lean();
+  const trip = await Trip.findById(tripId)
+    .select('destination startDate endDate days clerkUserId _id')
+    .lean()
+    .exec();
+  
   if (!trip || trip.clerkUserId !== userId) {
     return notFound();
   }
@@ -27,9 +51,14 @@ export default async function TripDetailPage({
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-5xl px-4 py-8 space-y-6">
-        {searchParams?.created === "1" && (
+        {sp?.created === "1" && (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
             Itinerary created successfully.
+          </div>
+        )}
+        {!trip.days?.length && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            Generating itinerary… This will auto-fill shortly. You can stay on this page.
           </div>
         )}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

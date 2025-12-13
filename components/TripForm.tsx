@@ -12,29 +12,82 @@ export default function TripForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
     setError(null);
+    setRedirecting(false);
 
-    const result = await createTripAction(formData);
+    try {
+      // Add timeout wrapper for the server action
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Request timed out. Please try again.")), 60000)
+      );
 
-    if (result?.error) {
-      setError(result.error);
+      const result = await Promise.race([
+        createTripAction(formData),
+        timeoutPromise
+      ]) as { error?: string; tripId?: string } | null;
+
+      if (!result) {
+        setError("No response from server. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      if (result.error) {
+        setError(result.error);
+        setLoading(false);
+        return;
+      }
+
+      if (result.tripId) {
+        // Clear errors and show redirecting state
+        setError(null);
+        setRedirecting(true);
+        setLoading(false);
+        
+        const redirectUrl = `/dashboard/${result.tripId}?created=1`;
+        
+        // Force immediate hard redirect - this will stop all execution
+        // Use replace to avoid back button issues and prevent crashes
+        window.location.replace(redirectUrl);
+        
+        // This should never execute, but just in case:
+        return;
+      }
+
+      // No tripId in result
+      setError("Failed to create trip - no trip ID returned");
       setLoading(false);
-    } else if (result?.tripId) {
-      router.push(`/dashboard/${result.tripId}?created=1`);
-      router.refresh();
-    } else {
-      setError("Failed to create trip");
+    } catch (err: any) {
+      // Better error handling
+      const errorMessage = err?.message || "Failed to create trip";
+      
+      // Check for specific error types
+      if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
+        setError("Network error. Please check your connection and try again.");
+      } else if (errorMessage.includes("timed out")) {
+        setError("Request timed out. The itinerary generation is taking longer than expected. Please try again.");
+      } else {
+        setError(errorMessage);
+      }
+      
       setLoading(false);
+      setRedirecting(false);
     }
   }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    await handleSubmit(fd);
+    // Don't await - let redirect happen immediately
+    handleSubmit(fd).catch((err) => {
+      console.error("Submit error:", err);
+      setError(err?.message || "Failed to submit");
+      setLoading(false);
+    });
   }
 
   return (
@@ -80,9 +133,14 @@ export default function TripForm() {
         />
       </div>
 
-      {loading && (
+      {loading && !redirecting && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700" role="status" aria-live="polite">
           Generating itinerary. This can take up to 2–3 minutes. Please keep this tab open.
+        </div>
+      )}
+      {redirecting && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700" role="status" aria-live="polite">
+          ✓ Itinerary created successfully! Redirecting to your trip...
         </div>
       )}
 
@@ -97,6 +155,7 @@ export default function TripForm() {
     </form>
   );
 }
+
 
 
 
