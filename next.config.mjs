@@ -10,8 +10,8 @@ const nextConfig = {
   // Optimize for production
   compress: true,
   poweredByHeader: false,
-  // Render.com compatibility - use standalone output
-  output: 'standalone',
+  // Netlify compatibility - remove standalone output (Netlify uses serverless functions)
+  // output: 'standalone', // Commented out for Netlify deployment
   // Turbopack config (empty to silence warning)
   turbopack: {},
 };
