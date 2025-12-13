@@ -53,28 +53,12 @@ npm run dev
 ```
 
 ## Scripts
-- `npm run dev` — start dev server (Webpack, Turbopack disabled)
-- `npm run build` — production build (standalone)
+- `npm run dev` — start dev server
+- `npm run build` — production build 
 - `npm start` — start prod server
 - `npm test` — run Jest tests
 - `npm run test:e2e` — Playwright E2E tests
 
-## Deploying to Render (Docker)
-This repo includes a multi-stage Dockerfile that works on Render.
-
-1) Create a new Web Service on Render
-2) Connect this GitHub repository
-3) Select Docker for runtime
-4) Set environment variables:
-   - `MONGODB_URI`
-   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
-   - `CLERK_SECRET_KEY`
-   - `AI_API_KEY`
-5) Expose port 3000 (Dockerfile already does).
-
-Notes:
-- Sentry is removed/disabled to avoid build/runtime errors.
-- Source maps disabled to prevent parsing issues in some hosts.
 
 ## Project Structure (high level)
 ```
