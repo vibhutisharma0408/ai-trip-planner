@@ -73,7 +73,7 @@ export default function ExpenseList({ expenses }: Props) {
 
       <ul className="mt-4 divide-y">
         {filtered.map((expense) => (
-          <li key={expense._id} className="flex items-center justify-between py-3">
+          <li key={expense._id.toString()} className="flex items-center justify-between py-3">
             <div>
               <p className="font-semibold">
                 ₹{expense.amount.toFixed(2)} • {expense.category}
@@ -84,13 +84,13 @@ export default function ExpenseList({ expenses }: Props) {
             </div>
             <div className="flex gap-2">
               <Link
-                href={`/edit-expense/${expense._id}`}
+                href={`/edit-expense/${expense._id.toString()}`}
                 className="rounded-md border px-3 py-2 text-sm hover:bg-slate-100"
               >
                 Edit
               </Link>
               <button
-                onClick={() => handleDelete(expense._id)}
+                onClick={() => handleDelete(expense._id.toString())}
                 className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100"
               >
                 Delete
