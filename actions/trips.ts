@@ -124,13 +124,15 @@ export async function createTripAction(formData: FormData) {
       };
     };
 
-    const prompt = `You are an expert travel planner. Generate a detailed trip itinerary for:
+    const prompt = `You are an expert travel planner with access to real-time knowledge. Research and generate a detailed, realistic trip itinerary for:
 Destination: ${parsed.data.destination}
 Dates: ${parsed.data.startDate} to ${parsed.data.endDate}
 ${parsed.data.budget ? `Budget: ₹${parsed.data.budget}` : ""}
 ${parsed.data.travelers ? `Travelers: ${parsed.data.travelers}` : ""}
 ${parsed.data.style ? `Style: ${parsed.data.style}` : ""}
 ${parsed.data.notes ? `Notes: ${parsed.data.notes}` : ""}
+
+IMPORTANT: Use real, specific places, attractions, restaurants, and activities in ${parsed.data.destination}. Avoid generic terms like "local sightseeing", "city landmarks", "popular spots", or "well-rated restaurants". Research and suggest actual well-known sites, e.g., for Delhi: Red Fort, India Gate, Chandni Chowk, Connaught Place; for Munnar: Mattupetty Dam, Eravikulam National Park, Lockhart Gap; for Mumbai: Gateway of India, Marine Drive, Elephanta Caves. For restaurants, name real places like specific cafes or eateries in ${parsed.data.destination}. Ensure all locations and activities are accurate and location-specific to ${parsed.data.destination}.
 
 Generate a day-by-day itinerary with activities. Every activity MUST include these fields: title (string), time (HH:MM), location (string), notes (string), cost (number). Costs must be realistic, non-zero INR estimates based on the activity and destination; provide concise actionable notes (reservations, tickets, transit, duration). Return ONLY valid JSON matching this structure:
 {
@@ -163,20 +165,15 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
       if (!process.env.AI_API_KEY) throw new Error("NO_AI_KEY");
       const openai = new OpenAI({ 
         apiKey: process.env.AI_API_KEY,
-        timeout: 15000, // 15s timeout
+        timeout: 30000, // 30s timeout
         maxRetries: 1
       });
-      const call = openai.responses.create({
+      const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        input: prompt,
+        messages: [{ role: "user", content: prompt }],
         temperature: 0.2
       });
-      // 15s timeout race
-      const result = await Promise.race([
-        call,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("AI_TIMEOUT")), 15000))
-      ]);
-      const content = (result as any).output_text as string | undefined;
+      const content = completion.choices[0].message.content as string | undefined;
       if (!content) throw new Error("NO_CONTENT");
       const parsedJson = JSON.parse(content);
       return tripSchema.parse(parsedJson);
