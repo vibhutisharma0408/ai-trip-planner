@@ -1,15 +1,4 @@
-import { Schema, model, models } from "mongoose";
-
-export interface ExpenseDocument {
-  _id: string;
-  userId: string;
-  amount: number;
-  category: string;
-  date: Date;
-  description: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import mongoose, { Schema, type InferSchemaType, type Model } from "mongoose";
 
 const ExpenseSchema = new Schema(
   {
@@ -26,6 +15,11 @@ const ExpenseSchema = new Schema(
 ExpenseSchema.index({ userId: 1, createdAt: -1 });
 ExpenseSchema.index({ userId: 1, amount: 1 });
 
-export const Expense =
-  models.Expense || model<ExpenseDocument>("Expense", ExpenseSchema);
+export type ExpenseDocument = InferSchemaType<typeof ExpenseSchema> & {
+  _id: mongoose.Types.ObjectId;
+};
+
+export const Expense: Model<ExpenseDocument> =
+  (mongoose.models.Expense as Model<ExpenseDocument>) ||
+  mongoose.model<ExpenseDocument>("Expense", ExpenseSchema);
 
