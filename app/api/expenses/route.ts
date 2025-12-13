@@ -26,8 +26,12 @@ export async function GET(req: NextRequest) {
   if (category) query.category = category;
   if (date) query.date = { $gte: new Date(date) };
 
-  const sortOption = sort === "amount" ? { amount: 1 } : { createdAt: -1 };
-  const expenses = await Expense.find(query).sort(sortOption).lean();
+  let expenses;
+  if (sort === "amount") {
+    expenses = await Expense.find(query).sort({ amount: 1 as 1 | -1 }).lean();
+  } else {
+    expenses = await Expense.find(query).sort({ createdAt: -1 as 1 | -1 }).lean();
+  }
 
   return NextResponse.json(expenses, { status: 200 });
 }
