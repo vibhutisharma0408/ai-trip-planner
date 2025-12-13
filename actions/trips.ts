@@ -163,7 +163,7 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
       if (!process.env.AI_API_KEY) throw new Error("NO_AI_KEY");
       const openai = new OpenAI({ 
         apiKey: process.env.AI_API_KEY,
-        timeout: 25000, // 25s timeout
+        timeout: 15000, // 15s timeout
         maxRetries: 1
       });
       const call = openai.responses.create({
@@ -171,10 +171,10 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
         input: prompt,
         temperature: 0.2
       });
-      // 25s timeout race (reduced from 30s for faster response)
+      // 15s timeout race
       const result = await Promise.race([
         call,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("AI_TIMEOUT")), 25000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error("AI_TIMEOUT")), 15000))
       ]);
       const content = (result as any).output_text as string | undefined;
       if (!content) throw new Error("NO_CONTENT");
@@ -182,33 +182,28 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
       return tripSchema.parse(parsedJson);
     }
 
-    // Fire-and-forget background enrichment
-    (async () => {
+    // Generate itinerary synchronously
+    try {
+      validated = await tryGenerateViaAI();
+    } catch {
       try {
-        try {
-          validated = await tryGenerateViaAI();
-        } catch {
-          try {
-            validated = await tryGenerateViaAI();
-          } catch {
-            validated = tripSchema.parse(buildFallback());
-          }
-        }
-        await Trip.findByIdAndUpdate(created._id, {
-          destination: validated.destination,
-          startDate: validated.startDate,
-          endDate: validated.endDate,
-          budget: validated.budget,
-          travelers: validated.travelers,
-          style: validated.style,
-          notes: validated.notes,
-          days: validated.days
-        });
-        revalidatePath(`/dashboard/${created._id.toString()}`);
+        validated = await tryGenerateViaAI();
       } catch {
-        // swallow background errors
+        validated = tripSchema.parse(buildFallback());
       }
-    })();
+    }
+
+    // Update the trip with the generated itinerary
+    await Trip.findByIdAndUpdate(created._id, {
+      destination: validated.destination,
+      startDate: validated.startDate,
+      endDate: validated.endDate,
+      budget: validated.budget,
+      travelers: validated.travelers,
+      style: validated.style,
+      notes: validated.notes,
+      days: validated.days
+    });
 
     revalidatePath("/dashboard");
     // Return only minimal, fully-serializable data to the client (client will redirect)

@@ -45,7 +45,7 @@ export default function Providers({ children }: { children: ReactNode }) {
   return (
     <ClerkProvider
       publishableKey={publishableKey}
-      fallbackRedirectUrl="/dashboard"
+      signInFallbackRedirectUrl="/dashboard"
     >
       {children}
     </ClerkProvider>

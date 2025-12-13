@@ -37,13 +37,15 @@ describe("/api/expenses", () => {
         date: new Date().toISOString(),
         description: "Lunch"
       }),
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json", "x-clerk-user-id": "user_1" }
     });
 
     const res = await POST(req);
     expect(res.status).toBe(201);
 
-    const getRes = await GET(new NextRequest("http://localhost/api/expenses"));
+    const getRes = await GET(new NextRequest("http://localhost/api/expenses", {
+      headers: { "x-clerk-user-id": "user_1" }
+    }));
     const data = await getRes.json();
     expect(Array.isArray(data)).toBe(true);
     expect(data[0].category).toBe("Food");
@@ -66,7 +68,7 @@ describe("/api/expenses", () => {
         date: new Date().toISOString(),
         description: "Taxi"
       }),
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json", "x-clerk-user-id": "user_1" }
     });
 
     const res = await PUT(req);
@@ -86,7 +88,8 @@ describe("/api/expenses", () => {
 
     const res = await DELETE(
       new NextRequest(`http://localhost/api/expenses?id=${expense._id}`, {
-        method: "DELETE"
+        method: "DELETE",
+        headers: { "x-clerk-user-id": "user_1" }
       })
     );
     expect(res.status).toBe(200);

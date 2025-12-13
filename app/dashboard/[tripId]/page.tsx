@@ -61,6 +61,11 @@ export default async function TripDetailPage({
             Generating itinerary… This will auto-fill shortly. You can stay on this page.
           </div>
         )}
+        {!trip.days?.length && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            Generating itinerary… This will auto-fill shortly. You can stay on this page.
+          </div>
+        )}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
