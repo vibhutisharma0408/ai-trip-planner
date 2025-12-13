@@ -52,6 +52,18 @@ AI_API_KEY=
 npm run dev
 ```
 
+## Deployment on Vercel
+1. Push your code to GitHub.
+2. Connect your GitHub repo to Vercel.
+3. Add environment variables in Vercel dashboard:
+   - `MONGODB_URI`
+   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+   - `CLERK_SECRET_KEY`
+   - `OPENAI_API_KEY`
+4. Deploy automatically on push.
+
+Live Demo: https://house-of-edtech-nine.vercel.app/
+
 ## Scripts
 - `npm run dev` — start dev server
 - `npm run build` — production build 

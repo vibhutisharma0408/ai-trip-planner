@@ -40,22 +40,27 @@ export async function POST(req: NextRequest) {
   const userId = req.headers.get("x-clerk-user-id");
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const payload = await req.json();
-  const parsed = expenseSchema.safeParse(payload);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  try {
+    const payload = await req.json();
+    const parsed = expenseSchema.safeParse(payload);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    }
+
+    await connectDB();
+    const sanitized = {
+      ...parsed.data,
+      description: sanitizeString(parsed.data.description),
+      category: sanitizeString(parsed.data.category),
+      userId
+    };
+
+    const expense = await Expense.create(sanitized);
+    return NextResponse.json(expense, { status: 201 });
+  } catch (error) {
+    console.error("Error creating expense:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  await connectDB();
-  const sanitized = {
-    ...parsed.data,
-    description: sanitizeString(parsed.data.description),
-    category: sanitizeString(parsed.data.category),
-    userId
-  };
-
-  const expense = await Expense.create(sanitized);
-  return NextResponse.json(expense, { status: 201 });
 }
 
 export async function PUT(req: NextRequest) {

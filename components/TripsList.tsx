@@ -2,6 +2,7 @@ import Link from "next/link";
 import { connectDB } from "@/lib/db";
 import { Trip } from "@/models/Trip";
 import { Button } from "@/components/ui/button";
+import TripStats from "@/components/TripStats";
 
 export default async function TripsList({ userId }: { userId: string }) {
   await connectDB();
@@ -25,6 +26,8 @@ export default async function TripsList({ userId }: { userId: string }) {
           <Button>Plan a trip</Button>
         </Link>
       </div>
+
+      <TripStats tripCount={trips.length} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {trips.map((trip: any) => (
