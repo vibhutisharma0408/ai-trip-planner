@@ -72,11 +72,11 @@ export default function Home() {
             <h2 className="text-xl font-semibold text-slate-900">
               What you can do
             </h2>
-            <ul className="space-y-2 text-slate-700">
+            <ul className="space-y-3 text-slate-700">
               {features.map((item) => (
-                <li key={item} className="flex items-start gap-2">
-                  <span className="mt-1 h-2 w-2 rounded-full bg-blue-600" />
-                  <span>{item}</span>
+                <li key={item} className="flex items-start gap-3">
+                  <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-blue-600" />
+                  <span className="leading-relaxed">{item}</span>
                 </li>
               ))}
             </ul>

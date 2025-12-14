@@ -6,8 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { connectDB } from "@/lib/db";
 import { Trip } from "@/models/Trip";
-import OpenAI from "openai";
-// Sentry disabled
+import { generateItinerary } from "@/lib/ai";
 
 // Note: headers() must be called directly in server actions, not in helper functions
 
@@ -90,37 +89,45 @@ export async function createTripAction(formData: FormData) {
 
     // Helper to build a minimal, deterministic fallback itinerary if AI is unavailable
     const buildFallback = () => {
-      const start = parsed.data.startDate;
-      const end = parsed.data.endDate;
-      const day1 = start;
-      // naive next day calculation (no tz handling needed for display strings)
-      const d = new Date(start);
-      d.setDate(d.getDate() + 1);
-      const day2 = d.toISOString().slice(0, 10);
+      const start = new Date(parsed.data.startDate);
+      const end = new Date(parsed.data.endDate);
+      const dayCount = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      // Generate array of dates
+      const dates = [];
+      for (let i = 0; i < dayCount; i++) {
+        const date = new Date(start);
+        date.setDate(start.getDate() + i);
+        dates.push(date.toISOString().split('T')[0]);
+      }
+
       return {
         destination: parsed.data.destination,
-        startDate: start,
-        endDate: end,
+        startDate: parsed.data.startDate,
+        endDate: parsed.data.endDate,
         ...(parsed.data.budget ? { budget: parsed.data.budget } : {}),
         ...(parsed.data.travelers ? { travelers: parsed.data.travelers } : {}),
         ...(parsed.data.style ? { style: parsed.data.style } : {}),
         ...(parsed.data.notes ? { notes: parsed.data.notes } : {}),
-        days: [
-          {
-            date: day1,
-            activities: [
-              { title: "Arrival & Check-in", time: "09:00", location: "Hotel lobby", notes: "Check in, drop luggage, quick breakfast nearby", cost: 500 },
-              { title: "Local sightseeing", time: "12:00", location: "City center landmarks", notes: "Walkable highlights tour and photo stops", cost: 200 }
-            ]
-          },
-          {
-            date: day2,
-            activities: [
-              { title: "City highlights tour", time: "10:00", location: "Hop-on hop-off / guided tour", notes: "Include museum or viewpoint stop", cost: 1500 },
-              { title: "Dinner at a popular spot", time: "19:30", location: "Well-rated local restaurant", notes: "Reserve table; try regional specialty", cost: 1200 }
-            ]
-          }
-        ]
+        days: dates.map((date, index) => ({
+          date,
+          activities: [
+            {
+              title: index === 0 ? "Arrival & Check-in" : `Day ${index + 1} exploration`,
+              time: index === 0 ? "09:00" : "10:00",
+              location: index === 0 ? "Hotel lobby" : "City center",
+              notes: index === 0 ? "Check in, drop luggage, quick breakfast nearby" : "Discover local attractions and landmarks",
+              cost: index === 0 ? 500 : 1000
+            },
+            {
+              title: index === 0 ? "Local sightseeing" : "Local dining experience",
+              time: index === 0 ? "12:00" : "19:00",
+              location: index === 0 ? "City center landmarks" : "Popular restaurant area",
+              notes: index === 0 ? "Walkable highlights tour and photo stops" : "Try regional cuisine",
+              cost: index === 0 ? 200 : 800
+            }
+          ]
+        }))
       };
     };
 
@@ -162,21 +169,23 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
     let validated: z.infer<typeof tripSchema>;
     
     async function tryGenerateViaAI(): Promise<z.infer<typeof tripSchema>> {
-      if (!process.env.AI_API_KEY) throw new Error("NO_AI_KEY");
-      const openai = new OpenAI({ 
-        apiKey: process.env.AI_API_KEY,
-        timeout: 30000, // 30s timeout
-        maxRetries: 1
+      const itinerary = await generateItinerary({
+        destination: parsed.data.destination,
+        startDate: parsed.data.startDate,
+        endDate: parsed.data.endDate,
+        travelerType: parsed.data.style || "general"
       });
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.2
-      });
-      const content = completion.choices[0].message.content as string | undefined;
-      if (!content) throw new Error("NO_CONTENT");
-      const parsedJson = JSON.parse(content);
-      return tripSchema.parse(parsedJson);
+
+      return {
+        destination: parsed.data.destination,
+        startDate: parsed.data.startDate,
+        endDate: parsed.data.endDate,
+        budget: parsed.data.budget,
+        travelers: parsed.data.travelers,
+        style: parsed.data.style,
+        notes: (parsed.data.notes ? parsed.data.notes + "\n\n" : "") + itinerary.overview,
+        days: itinerary.days
+      };
     }
 
     // Generate itinerary synchronously

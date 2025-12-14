@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createTripAction } from "@/actions/trips";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,19 @@ export default function TripForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
+  const [destination, setDestination] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (destination.length > 1) {
+      fetch(`/api/locations?q=${encodeURIComponent(destination)}`)
+        .then(res => res.json())
+        .then(data => setSuggestions(data.suggestions))
+        .catch(() => setSuggestions([]));
+    } else {
+      setSuggestions([]);
+    }
+  }, [destination]);
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
@@ -100,7 +113,29 @@ export default function TripForm() {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="destination">Destination</Label>
-          <Input id="destination" name="destination" placeholder="e.g., Paris, France" required />
+          <div className="relative">
+            <Input
+              id="destination"
+              name="destination"
+              placeholder="e.g., Paris, France"
+              value={destination}
+              onChange={(e) => setDestination(e.target.value)}
+              required
+            />
+            {suggestions.length > 0 && (
+              <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                {suggestions.map((suggestion, index) => (
+                  <li
+                    key={index}
+                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                    onClick={() => setDestination(suggestion)}
+                  >
+                    {suggestion}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
         <div className="space-y-2">
           <Label htmlFor="style">Travel style</Label>
