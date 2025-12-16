@@ -17,7 +17,9 @@ const tripInputSchema = z.object({
   budget: z.number().optional(),
   travelers: z.number().optional(),
   style: z.string().optional(),
-  notes: z.string().optional()
+  notes: z.string().optional(),
+  strictAI: z.boolean().optional(),
+  preGeneratedItinerary: z.string().optional()
 });
 
 const activitySchema = z.object({
@@ -66,7 +68,9 @@ export async function createTripAction(formData: FormData) {
         ? Number(formData.get("travelers"))
         : undefined,
       style: formData.get("style")?.toString(),
-      notes: formData.get("notes")?.toString()
+      notes: formData.get("notes")?.toString(),
+      strictAI: formData.get("strictAI") === "on",
+      preGeneratedItinerary: formData.get("preGeneratedItinerary")?.toString()
     });
 
     if (!parsed.success) {
@@ -131,50 +135,23 @@ export async function createTripAction(formData: FormData) {
       };
     };
 
-    const prompt = `You are an expert travel planner with access to real-time knowledge. Research and generate a detailed, realistic trip itinerary for:
-Destination: ${parsed.data.destination}
-Dates: ${parsed.data.startDate} to ${parsed.data.endDate}
-${parsed.data.budget ? `Budget: ₹${parsed.data.budget}` : ""}
-${parsed.data.travelers ? `Travelers: ${parsed.data.travelers}` : ""}
-${parsed.data.style ? `Style: ${parsed.data.style}` : ""}
-${parsed.data.notes ? `Notes: ${parsed.data.notes}` : ""}
 
-IMPORTANT: Use real, specific places, attractions, restaurants, and activities in ${parsed.data.destination}. Avoid generic terms like "local sightseeing", "city landmarks", "popular spots", or "well-rated restaurants". Research and suggest actual well-known sites, e.g., for Delhi: Red Fort, India Gate, Chandni Chowk, Connaught Place; for Munnar: Mattupetty Dam, Eravikulam National Park, Lockhart Gap; for Mumbai: Gateway of India, Marine Drive, Elephanta Caves. For restaurants, name real places like specific cafes or eateries in ${parsed.data.destination}. Ensure all locations and activities are accurate and location-specific to ${parsed.data.destination}.
-
-Generate a day-by-day itinerary with activities. Every activity MUST include these fields: title (string), time (HH:MM), location (string), notes (string), cost (number). Costs must be realistic, non-zero INR estimates based on the activity and destination; provide concise actionable notes (reservations, tickets, transit, duration). Return ONLY valid JSON matching this structure:
-{
-  "destination": "${parsed.data.destination}",
-  "startDate": "${parsed.data.startDate}",
-  "endDate": "${parsed.data.endDate}",
-  ${parsed.data.budget ? `"budget": ${parsed.data.budget},` : ""}
-  ${parsed.data.travelers ? `"travelers": ${parsed.data.travelers},` : ""}
-  ${parsed.data.style ? `"style": "${parsed.data.style}",` : ""}
-  ${parsed.data.notes ? `"notes": "${parsed.data.notes}",` : ""}
-  "days": [
-    {
-      "date": "YYYY-MM-DD",
-      "activities": [
-        {
-          "title": "Activity name",
-          "time": "HH:MM",
-          "location": "Location",
-          "notes": "Details",
-          "cost": 1000
-        }
-      ]
-    }
-  ]
-}`;
 
     let validated: z.infer<typeof tripSchema>;
-    
+
     async function tryGenerateViaAI(): Promise<z.infer<typeof tripSchema>> {
       const itinerary = await generateItinerary({
         destination: parsed.data.destination,
         startDate: parsed.data.startDate,
         endDate: parsed.data.endDate,
-        travelerType: parsed.data.style || "general"
+        travelerType: parsed.data.style || "general",
+        budget: parsed.data.budget,
+        travelers: parsed.data.travelers,
+        notes: parsed.data.notes,
+        disableFallback: parsed.data.strictAI
       });
+
+      console.log(itinerary);
 
       return {
         destination: parsed.data.destination,
@@ -188,10 +165,27 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
       };
     }
 
-    // Generate itinerary synchronously
+    // Generate itinerary
     try {
-      validated = await tryGenerateViaAI();
-    } catch {
+      if (parsed.data.preGeneratedItinerary) {
+        const preGenerated = JSON.parse(parsed.data.preGeneratedItinerary);
+        validated = {
+          destination: parsed.data.destination,
+          startDate: parsed.data.startDate,
+          endDate: parsed.data.endDate,
+          budget: parsed.data.budget,
+          travelers: parsed.data.travelers,
+          style: parsed.data.style,
+          notes: (parsed.data.notes ? parsed.data.notes + "\n\n" : "") + preGenerated.overview,
+          days: preGenerated.days
+        };
+      } else {
+        validated = await tryGenerateViaAI();
+      }
+    } catch (error) {
+      if (parsed.data.strictAI) {
+        throw error; // Re-throw if strict mode is on
+      }
       try {
         validated = await tryGenerateViaAI();
       } catch {
@@ -217,7 +211,7 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
   } catch (error: any) {
     // Better error handling with more specific messages
     let errorMessage = "Failed to create trip";
-    
+
     if (error?.message) {
       if (error.message.includes("NO_AI_KEY")) {
         errorMessage = "AI API key is missing. Please configure AI_API_KEY.";
@@ -229,11 +223,13 @@ Generate a day-by-day itinerary with activities. Every activity MUST include the
         errorMessage = "You must be signed in to create a trip.";
       } else if (error.message.includes("MONGODB_URI")) {
         errorMessage = "Database connection error. Please try again.";
+      } else if (error.message.includes("bad auth") || error.message.includes("Authentication failed")) {
+        errorMessage = "Database authentication failed. Please check your MONGODB_URI credentials.";
       } else {
         errorMessage = error.message;
       }
     }
-    
+
     return { error: errorMessage };
   }
 }
@@ -299,7 +295,7 @@ export async function updateActivityAction(formData: FormData) {
   if (location !== undefined) activity.location = location;
   if (notes !== undefined) activity.notes = notes;
   if (cost !== undefined) activity.cost = cost;
-  
+
   trip.markModified(`days.${dayIndex}.activities`);
   await trip.save();
   revalidatePath(`/dashboard/${trip._id}`);

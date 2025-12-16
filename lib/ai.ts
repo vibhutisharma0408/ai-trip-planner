@@ -1,32 +1,29 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { puter } from '@heyputer/puter.js';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-
-const model = genAI.getGenerativeModel({ 
-  model: "gemini-1.5-flash",
-  generationConfig: {
-    temperature: 0.3,
-    topP: 0.95,
-    topK: 40,
-    maxOutputTokens: 8192,
-  }
-});
+// Initialize Puter with token if available
+if (process.env.PUTER_TOKEN) {
+  puter.setAuthToken(process.env.PUTER_TOKEN);
+}
 
 export async function generateItinerary({
   destination,
   startDate,
   endDate,
-  travelerType
+  travelerType,
+  budget,
+  travelers,
+  notes,
+  disableFallback
 }: {
   destination: string;
   startDate: string;
   endDate: string;
   travelerType: string;
+  budget?: number;
+  travelers?: number;
+  notes?: string;
+  disableFallback?: boolean;
 }) {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY missing");
-  }
-
   const start = new Date(startDate);
   const end = new Date(endDate);
   const dayCount = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -45,8 +42,12 @@ export async function generateItinerary({
 Destination: ${destination}
 Start Date: ${startDate}
 End Date: ${endDate}
-**IMPORTANT: Generate exactly ${dayCount} days of activities, one for each day from ${startDate} to ${endDate}**
+${budget ? `Budget: ₹${budget}` : ""}
+${travelers ? `Travelers: ${travelers}` : ""}
 Traveler Type: ${travelerType}
+${notes ? `User Notes/Preferences: ${notes}` : ""}
+
+**IMPORTANT: Generate exactly ${dayCount} days of activities, one for each day from ${startDate} to ${endDate}**
 
 CRITICAL REQUIREMENTS:
 1. You MUST create exactly ${dayCount} day objects in the "days" array
@@ -55,6 +56,7 @@ CRITICAL REQUIREMENTS:
 4. For major cities, include: famous landmarks, specific restaurants (with actual names), museums, markets, neighborhoods
 5. For smaller destinations, research actual attractions, viewpoints, local spots
 6. Each activity must have: title, time (HH:MM), location (specific address or landmark name), notes (booking info, duration, tips), cost (realistic INR estimate)
+7. Respect the user's budget and notes in your recommendations.
 
 Example of specific vs generic:
 ❌ Generic: "Visit local market", "Popular restaurant", "City landmarks"
@@ -65,7 +67,7 @@ Return ONLY valid JSON matching this exact structure (NO extra text):
   "overview": "Brief trip summary for ${travelerType} travelers",
   "days": [
 ${dates.map((date, index) =>
-    `    {
+      `    {
       "date": "${date}",
       "activities": [
         {
@@ -77,17 +79,35 @@ ${dates.map((date, index) =>
         }
       ]
     }${index < dates.length - 1 ? ',' : ''}`
-).join('\n')}
+    ).join('\n')}
   ]
 }`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let content = response.text();
-    
+    console.log("Sending request to Puter AI...");
+    const response = await puter.ai.chat(prompt);
+    console.log("Puter AI Response:", response);
+
+    let content = "";
+    if (typeof response === 'string') {
+      content = response;
+    } else if (response?.message?.content) {
+      const msgContent = response.message.content;
+      if (typeof msgContent === 'string') {
+        content = msgContent;
+      } else if (Array.isArray(msgContent)) {
+        content = msgContent.map((part: any) => part.text || part).join('');
+      } else {
+        content = String(msgContent);
+      }
+    } else if (response?.message) {
+      content = String(response.message);
+    } else {
+      throw new Error("Unexpected response format from Puter AI: " + JSON.stringify(response));
+    }
+
     // Clean any markdown formatting
     content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    
+
     const parsedJson = JSON.parse(content);
 
     // Validate day count
@@ -97,8 +117,12 @@ ${dates.map((date, index) =>
 
     return parsedJson;
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('AI generation failed:', error.message);
+
+    if (disableFallback) {
+      throw error;
+    }
 
     // Fallback: Generate basic itinerary with all days
     console.log('Using fallback itinerary generation');
@@ -144,13 +168,26 @@ Provide advice in this JSON format:
   "recommendations": ["2-3 spending optimizations"]
 }`;
 
-  const result = await model.generateContent(`${systemPrompt}\n\n${userPrompt}`);
-  const response = await result.response;
-  let content = response.text();
-  
+  const response = await puter.ai.chat(`${systemPrompt}\n\n${userPrompt}`);
+
+  let content = "";
+  if (typeof response === 'string') {
+    content = response;
+  } else if (response?.message?.content) {
+    const msgContent = response.message.content;
+    if (typeof msgContent === 'string') {
+      content = msgContent;
+    } else if (Array.isArray(msgContent)) {
+      content = msgContent.map((part: any) => part.text || part).join('');
+    } else {
+      content = String(msgContent);
+    }
+  } else {
+    content = JSON.stringify(response);
+  }
+
   // Clean any markdown formatting
   content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  
+
   return JSON.parse(content);
 }
-
