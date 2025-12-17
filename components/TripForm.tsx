@@ -316,7 +316,7 @@ ${dates.map((date, index) =>
           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
         <Label htmlFor="strictAI" className="font-normal text-slate-600">
-          Strict AI Mode (Do not use fallback itinerary if AI fails)
+          Strict AI Mode 
         </Label>
       </div>
 
